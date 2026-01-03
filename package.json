@@ -6,7 +6,9 @@
     "dev": "node --watch server.js",
     "start": "node server.js",
     "create-admin": "node scripts/create-admin.js",
-    "seed": "node scripts/seed-mongodb.js"
+    "seed": "node scripts/seed-mongodb.js",
+    "seed-plans": "node scripts/seed-plans.js",
+    "seed-plans:force": "node scripts/seed-plans.js --force"
   },
   "dependencies": {
     "axios": "^1.6.2",

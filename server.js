@@ -26,8 +26,38 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
+// CORS configuration - supports multiple origins (localhost for dev, Vercel for production)
+const allowedOrigins = process.env.FRONTEND_URL 
+  ? process.env.FRONTEND_URL.split(',').map(url => url.trim())
+  : ['http://localhost:5173'];
+
+// Log CORS configuration on startup
+console.log('🌐 CORS Configuration:');
+console.log('   Allowed Origins:', allowedOrigins);
+console.log('   FRONTEND_URL env:', process.env.FRONTEND_URL || '(not set - using default localhost)');
+console.log('   NODE_ENV:', process.env.NODE_ENV || 'development');
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is in allowed list
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      // For development, allow localhost
+      if (process.env.NODE_ENV !== 'production' && origin.startsWith('http://localhost')) {
+        callback(null, true);
+      } else {
+        // Log the rejected origin for debugging
+        console.warn(`⚠️  CORS blocked origin: ${origin}`);
+        console.warn(`   Allowed origins: ${allowedOrigins.join(', ')}`);
+        console.warn(`   Set FRONTEND_URL environment variable to include: ${origin}`);
+        callback(new Error(`CORS: Origin ${origin} not allowed. Set FRONTEND_URL env var.`));
+      }
+    }
+  },
   credentials: true
 }));
 app.use(express.json());
@@ -54,6 +84,8 @@ app.get('/api/health', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`\n✅ Server running on port ${PORT}`);
+  console.log(`📡 API available at: http://localhost:${PORT}/api`);
+  console.log(`🏥 Health check: http://localhost:${PORT}/api/health\n`);
 });
 
