@@ -2,10 +2,11 @@ import express from 'express';
 import { getDB } from '../config/database.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 import { uploadSongFiles, uploadPhoto, uploadVideo } from '../middleware/upload.js';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import fs from 'fs';
+import { uploadFile, deleteFile } from '../utils/gridfs.js';
 import { ObjectId } from 'mongodb';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,11 +17,32 @@ const router = express.Router();
 router.use(authenticate);
 router.use(requireAdmin);
 
-// Helper function to format document with id
+// Helper function to format document with id and convert file IDs to URLs
 const formatDoc = (doc) => {
   if (!doc) return null;
-  const { _id, ...rest } = doc;
-  return { id: _id.toString(), ...rest };
+  const { _id, file_id, cover_image_id, file_path, cover_image_path, ...rest } = doc;
+  
+  // Convert file_id to URL if it exists, otherwise use legacy file_path
+  const formatted = {
+    id: _id.toString(),
+    ...rest
+  };
+  
+  if (file_id) {
+    formatted.file_id = file_id.toString();
+    formatted.file_path = `/api/files/${file_id}`;
+  } else if (file_path) {
+    formatted.file_path = file_path;
+  }
+  
+  if (cover_image_id) {
+    formatted.cover_image_id = cover_image_id.toString();
+    formatted.cover_image_path = `/api/files/${cover_image_id}`;
+  } else if (cover_image_path) {
+    formatted.cover_image_path = cover_image_path;
+  }
+  
+  return formatted;
 };
 
 // ========== SONGS MANAGEMENT ==========
@@ -40,10 +62,9 @@ router.post('/songs', uploadSongFiles.fields([
     const musicFile = req.files.musicFile[0];
     const coverFile = req.files?.coverImage?.[0];
 
-    const musicFilePath = `/uploads/music/${musicFile.filename}`;
-    const coverImagePath = coverFile 
-      ? `/uploads/covers/${coverFile.filename}` 
-      : null;
+    // Upload files to GridFS
+    const musicFileId = await uploadFile(musicFile, { type: 'music' });
+    const coverImageId = coverFile ? await uploadFile(coverFile, { type: 'cover' }) : null;
 
     const db = await getDB();
     const result = await db.collection('songs').insertOne({
@@ -51,8 +72,8 @@ router.post('/songs', uploadSongFiles.fields([
       artist,
       album: album || null,
       genre: genre || null,
-      file_path: musicFilePath,
-      cover_image_path: coverImagePath,
+      file_id: musicFileId,
+      cover_image_id: coverImageId,
       file_size: musicFile.size,
       uploaded_by: new ObjectId(req.user.id),
       album_id: album_id ? new ObjectId(album_id) : null,
@@ -213,14 +234,29 @@ router.delete('/songs/:id', async (req, res) => {
       return res.status(404).json({ error: 'Song not found' });
     }
 
-    // Delete files
-    if (song.file_path) {
+    // Delete files from GridFS
+    if (song.file_id) {
+      try {
+        await deleteFile(song.file_id);
+      } catch (error) {
+        console.error('Error deleting music file from GridFS:', error);
+      }
+    }
+    if (song.cover_image_id) {
+      try {
+        await deleteFile(song.cover_image_id);
+      } catch (error) {
+        console.error('Error deleting cover image from GridFS:', error);
+      }
+    }
+    // Support legacy file_path for migration
+    if (song.file_path && !song.file_id) {
       const filePath = path.join(__dirname, '..', song.file_path);
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
     }
-    if (song.cover_image_path) {
+    if (song.cover_image_path && !song.cover_image_id) {
       const coverPath = path.join(__dirname, '..', song.cover_image_path);
       if (fs.existsSync(coverPath)) {
         fs.unlinkSync(coverPath);
@@ -287,24 +323,39 @@ router.delete('/songs/bulk', async (req, res) => {
 
     const songs = await db.collection('songs').find(
       { _id: { $in: objectIds } },
-      { projection: { file_path: 1, cover_image_path: 1 } }
+      { projection: { file_id: 1, cover_image_id: 1, file_path: 1, cover_image_path: 1 } }
     ).toArray();
 
-    // Delete files
-    songs.forEach(song => {
-      if (song.file_path) {
+    // Delete files from GridFS
+    for (const song of songs) {
+      if (song.file_id) {
+        try {
+          await deleteFile(song.file_id);
+        } catch (error) {
+          console.error('Error deleting music file from GridFS:', error);
+        }
+      }
+      if (song.cover_image_id) {
+        try {
+          await deleteFile(song.cover_image_id);
+        } catch (error) {
+          console.error('Error deleting cover image from GridFS:', error);
+        }
+      }
+      // Support legacy file_path for migration
+      if (song.file_path && !song.file_id) {
         const filePath = path.join(__dirname, '..', song.file_path);
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
         }
       }
-      if (song.cover_image_path) {
+      if (song.cover_image_path && !song.cover_image_id) {
         const coverPath = path.join(__dirname, '..', song.cover_image_path);
         if (fs.existsSync(coverPath)) {
           fs.unlinkSync(coverPath);
         }
       }
-    });
+    }
 
     await db.collection('songs').deleteMany({ _id: { $in: objectIds } });
 
@@ -332,10 +383,9 @@ router.post('/instrumentals', uploadSongFiles.fields([
     const musicFile = req.files.musicFile[0];
     const coverFile = req.files?.coverImage?.[0];
 
-    const musicFilePath = `/uploads/music/${musicFile.filename}`;
-    const coverImagePath = coverFile 
-      ? `/uploads/covers/${coverFile.filename}` 
-      : null;
+    // Upload files to GridFS
+    const musicFileId = await uploadFile(musicFile, { type: 'music' });
+    const coverImageId = coverFile ? await uploadFile(coverFile, { type: 'cover' }) : null;
 
     const db = await getDB();
     const result = await db.collection('songs').insertOne({
@@ -343,8 +393,8 @@ router.post('/instrumentals', uploadSongFiles.fields([
       artist,
       album: album || null,
       genre: genre || null,
-      file_path: musicFilePath,
-      cover_image_path: coverImagePath,
+      file_id: musicFileId,
+      cover_image_id: coverImageId,
       file_size: musicFile.size,
       uploaded_by: new ObjectId(req.user.id),
       album_id: album_id ? new ObjectId(album_id) : null,
@@ -1031,16 +1081,15 @@ router.post('/albums', uploadSongFiles.single('coverImage'), async (req, res) =>
       return res.status(400).json({ error: 'Name and artist are required' });
     }
 
-    const coverImagePath = req.file 
-      ? `/uploads/covers/${req.file.filename}` 
-      : null;
+    // Upload cover image to GridFS
+    const coverImageId = req.file ? await uploadFile(req.file, { type: 'cover' }) : null;
 
     const db = await getDB();
     const result = await db.collection('albums').insertOne({
       name,
       artist,
       description: description || null,
-      cover_image_path: coverImagePath,
+      cover_image_id: coverImageId,
       release_date: release_date ? new Date(release_date) : null,
       genre: genre || null,
       created_by: new ObjectId(req.user.id),
@@ -1103,7 +1152,16 @@ router.delete('/albums/:id', async (req, res) => {
       return res.status(404).json({ error: 'Album not found' });
     }
 
-    if (album.cover_image_path) {
+    // Delete cover image from GridFS
+    if (album.cover_image_id) {
+      try {
+        await deleteFile(album.cover_image_id);
+      } catch (error) {
+        console.error('Error deleting album cover image from GridFS:', error);
+      }
+    }
+    // Support legacy cover_image_path for migration
+    if (album.cover_image_path && !album.cover_image_id) {
       const coverPath = path.join(__dirname, '..', album.cover_image_path);
       if (fs.existsSync(coverPath)) {
         fs.unlinkSync(coverPath);
@@ -1193,13 +1251,14 @@ router.post('/photos', uploadPhoto.single('photoFile'), async (req, res) => {
       return res.status(400).json({ error: 'Title and photo file are required' });
     }
 
-    const photoFilePath = `/uploads/photos/${req.file.filename}`;
+    // Upload photo to GridFS
+    const photoFileId = await uploadFile(req.file, { type: 'photo' });
     const db = await getDB();
 
     const result = await db.collection('photos').insertOne({
       title,
       description: description || null,
-      file_path: photoFilePath,
+      file_id: photoFileId,
       file_size: req.file.size,
       uploaded_by: new ObjectId(req.user.id),
       is_archived: false,
@@ -1345,9 +1404,20 @@ router.delete('/photos/:id', async (req, res) => {
       return res.status(404).json({ error: 'Photo not found' });
     }
 
-    const filePath = path.join(__dirname, '..', photo.file_path);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+    // Delete file from GridFS
+    if (photo.file_id) {
+      try {
+        await deleteFile(photo.file_id);
+      } catch (error) {
+        console.error('Error deleting photo file from GridFS:', error);
+      }
+    }
+    // Support legacy file_path for migration
+    if (photo.file_path && !photo.file_id) {
+      const filePath = path.join(__dirname, '..', photo.file_path);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
     }
 
     await db.collection('photos').deleteOne({ _id: new ObjectId(id) });
@@ -1408,15 +1478,26 @@ router.delete('/photos/bulk', async (req, res) => {
 
     const photos = await db.collection('photos').find(
       { _id: { $in: objectIds } },
-      { projection: { file_path: 1 } }
+      { projection: { file_id: 1, file_path: 1 } }
     ).toArray();
 
-    photos.forEach(photo => {
-      const fullPath = path.join(__dirname, '..', photo.file_path);
-      if (fs.existsSync(fullPath)) {
-        fs.unlinkSync(fullPath);
+    // Delete files from GridFS
+    for (const photo of photos) {
+      if (photo.file_id) {
+        try {
+          await deleteFile(photo.file_id);
+        } catch (error) {
+          console.error('Error deleting photo file from GridFS:', error);
+        }
       }
-    });
+      // Support legacy file_path for migration
+      if (photo.file_path && !photo.file_id) {
+        const fullPath = path.join(__dirname, '..', photo.file_path);
+        if (fs.existsSync(fullPath)) {
+          fs.unlinkSync(fullPath);
+        }
+      }
+    }
 
     const deleteResult = await db.collection('photos').deleteMany({ _id: { $in: objectIds } });
 
@@ -1440,13 +1521,14 @@ router.post('/videos', uploadVideo.single('videoFile'), async (req, res) => {
       return res.status(400).json({ error: 'Title and video file are required' });
     }
 
-    const videoFilePath = `/uploads/videos/${req.file.filename}`;
+    // Upload video to GridFS
+    const videoFileId = await uploadFile(req.file, { type: 'video' });
     const db = await getDB();
 
     const result = await db.collection('videos').insertOne({
       title,
       description: description || null,
-      file_path: videoFilePath,
+      file_id: videoFileId,
       file_size: req.file.size,
       uploaded_by: new ObjectId(req.user.id),
       is_archived: false,
@@ -1592,17 +1674,22 @@ router.delete('/videos/:id', async (req, res) => {
       return res.status(404).json({ error: 'Video not found' });
     }
 
-    const filePath = path.join(__dirname, '..', video.file_path);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-
-    if (video.thumbnail_path) {
-      const thumbnailPath = path.join(__dirname, '..', video.thumbnail_path);
-      if (fs.existsSync(thumbnailPath)) {
-        fs.unlinkSync(thumbnailPath);
+    // Delete file from GridFS
+    if (video.file_id) {
+      try {
+        await deleteFile(video.file_id);
+      } catch (error) {
+        console.error('Error deleting video file from GridFS:', error);
       }
     }
+    // Support legacy file_path for migration
+    if (video.file_path && !video.file_id) {
+      const filePath = path.join(__dirname, '..', video.file_path);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    }
+    // Note: thumbnail_path handling could be added if needed (currently videos don't use thumbnails in GridFS)
 
     await db.collection('videos').deleteOne({ _id: new ObjectId(id) });
 
@@ -1662,21 +1749,26 @@ router.delete('/videos/bulk', async (req, res) => {
 
     const videos = await db.collection('videos').find(
       { _id: { $in: objectIds } },
-      { projection: { file_path: 1, thumbnail_path: 1 } }
+      { projection: { file_id: 1, file_path: 1, thumbnail_path: 1 } }
     ).toArray();
 
-    videos.forEach(video => {
-      const fullPath = path.join(__dirname, '..', video.file_path);
-      if (fs.existsSync(fullPath)) {
-        fs.unlinkSync(fullPath);
-      }
-      if (video.thumbnail_path) {
-        const thumbnailFullPath = path.join(__dirname, '..', video.thumbnail_path);
-        if (fs.existsSync(thumbnailFullPath)) {
-          fs.unlinkSync(thumbnailFullPath);
+    // Delete files from GridFS
+    for (const video of videos) {
+      if (video.file_id) {
+        try {
+          await deleteFile(video.file_id);
+        } catch (error) {
+          console.error('Error deleting video file from GridFS:', error);
         }
       }
-    });
+      // Support legacy file_path for migration
+      if (video.file_path && !video.file_id) {
+        const fullPath = path.join(__dirname, '..', video.file_path);
+        if (fs.existsSync(fullPath)) {
+          fs.unlinkSync(fullPath);
+        }
+      }
+    }
 
     const deleteResult = await db.collection('videos').deleteMany({ _id: { $in: objectIds } });
 

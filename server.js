@@ -15,6 +15,7 @@ import albumRoutes from './routes/albums.js';
 import instrumentalRoutes from './routes/instrumentals.js';
 import playlistRoutes from './routes/playlists.js';
 import userRoutes from './routes/users.js';
+import fileRoutes from './routes/files.js';
 
 dotenv.config();
 
@@ -32,20 +33,6 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Serve uploaded music files with proper headers for streaming
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
-  setHeaders: (res, filePath) => {
-    // Enable range requests for audio streaming
-    if (filePath.endsWith('.mp3') || filePath.endsWith('.wav') || 
-        filePath.endsWith('.flac') || filePath.endsWith('.m4a') || 
-        filePath.endsWith('.ogg') || filePath.endsWith('.mpeg') || 
-        filePath.endsWith('.mpg')) {
-      res.setHeader('Accept-Ranges', 'bytes');
-      res.setHeader('Content-Type', 'audio/mpeg');
-    }
-  }
-}));
-
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/songs', songRoutes);
@@ -59,6 +46,7 @@ app.use('/api/albums', albumRoutes);
 app.use('/api/instrumentals', instrumentalRoutes);
 app.use('/api/playlists', playlistRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/files', fileRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -6,19 +6,27 @@ import { ObjectId } from 'mongodb';
 const router = express.Router();
 
 // Helper function to format album document
-const formatAlbum = (album) => ({
-  id: album._id.toString(),
-  name: album.name,
-  artist: album.artist,
-  description: album.description,
-  cover_image_path: album.cover_image_path,
-  release_date: album.release_date,
-  genre: album.genre,
-  is_active: album.is_active !== false,
-  created_at: album.created_at,
-  updated_at: album.updated_at,
-  song_count: album.song_count || 0
-});
+const formatAlbum = (album) => {
+  // Convert cover_image_id to URL if it exists, otherwise use legacy cover_image_path
+  const cover_image_path = album.cover_image_id 
+    ? `/api/files/${album.cover_image_id}` 
+    : (album.cover_image_path || null);
+
+  return {
+    id: album._id.toString(),
+    name: album.name,
+    artist: album.artist,
+    description: album.description,
+    cover_image_path: cover_image_path,
+    cover_image_id: album.cover_image_id?.toString(),
+    release_date: album.release_date,
+    genre: album.genre,
+    is_active: album.is_active !== false,
+    created_at: album.created_at,
+    updated_at: album.updated_at,
+    song_count: album.song_count || 0
+  };
+};
 
 // Get all active albums (requires subscription)
 router.get('/', authenticate, requireSubscription, async (req, res) => {

@@ -6,25 +6,38 @@ import { ObjectId } from 'mongodb';
 const router = express.Router();
 
 // Helper function to format song document
-const formatSong = (song) => ({
-  id: song._id.toString(),
-  title: song.title,
-  artist: song.artist,
-  album: song.album,
-  genre: song.genre,
-  file_path: song.file_path,
-  cover_image_path: song.cover_image_path,
-  duration: song.duration,
-  file_size: song.file_size,
-  is_archived: song.is_archived || false,
-  is_active: song.is_active !== false,
-  uploaded_by: song.uploaded_by?.toString(),
-  album_id: song.album_id?.toString(),
-  play_count: song.play_count || 0,
-  created_at: song.created_at,
-  updated_at: song.updated_at,
-  favorite_count: song.favorite_count || 0
-});
+const formatSong = (song) => {
+  // Convert file_id to URL if it exists, otherwise use legacy file_path
+  const file_path = song.file_id 
+    ? `/api/files/${song.file_id}` 
+    : (song.file_path || null);
+  
+  const cover_image_path = song.cover_image_id 
+    ? `/api/files/${song.cover_image_id}` 
+    : (song.cover_image_path || null);
+
+  return {
+    id: song._id.toString(),
+    title: song.title,
+    artist: song.artist,
+    album: song.album,
+    genre: song.genre,
+    file_path: file_path,
+    cover_image_path: cover_image_path,
+    file_id: song.file_id?.toString(),
+    cover_image_id: song.cover_image_id?.toString(),
+    duration: song.duration,
+    file_size: song.file_size,
+    is_archived: song.is_archived || false,
+    is_active: song.is_active !== false,
+    uploaded_by: song.uploaded_by?.toString(),
+    album_id: song.album_id?.toString(),
+    play_count: song.play_count || 0,
+    created_at: song.created_at,
+    updated_at: song.updated_at,
+    favorite_count: song.favorite_count || 0
+  };
+};
 
 // Get all active songs (requires subscription)
 router.get('/', authenticate, requireSubscription, async (req, res) => {
