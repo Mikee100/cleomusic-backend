@@ -19,43 +19,100 @@ router.get('/:fileId', async (req, res) => {
       return res.status(404).json({ error: 'File not found' });
     }
 
-    // Set appropriate headers
-    if (metadata.metadata?.contentType) {
-      res.setHeader('Content-Type', metadata.metadata.contentType);
-    }
+    const fileSize = metadata.length;
+    const contentType = metadata.metadata?.contentType || 'application/octet-stream';
+    const range = req.headers.range;
 
-    // Enable range requests for audio/video streaming
-    if (metadata.metadata?.contentType?.startsWith('audio/') || 
-        metadata.metadata?.contentType?.startsWith('video/')) {
-      res.setHeader('Accept-Ranges', 'bytes');
+    // Handle range requests for audio/video
+    if (range && (contentType.startsWith('audio/') || contentType.startsWith('video/'))) {
+      const parts = range.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
       
-      const range = req.headers.range;
-      if (range) {
-        const parts = range.replace(/bytes=/, '').split('-');
-        const start = parseInt(parts[0], 10);
-        const end = parts[1] ? parseInt(parts[1], 10) : metadata.length - 1;
-        const chunksize = (end - start) + 1;
-
-        res.status(206); // Partial Content
-        res.setHeader('Content-Range', `bytes ${start}-${end}/${metadata.length}`);
-        res.setHeader('Content-Length', chunksize);
-      } else {
-        res.setHeader('Content-Length', metadata.length);
+      if (start >= fileSize || end >= fileSize || start > end) {
+        res.status(416).setHeader('Content-Range', `bytes */${fileSize}`);
+        return res.end();
       }
+
+      const chunksize = (end - start) + 1;
+
+      res.status(206);
+      res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Content-Length', chunksize);
+      res.setHeader('Content-Type', contentType);
+
+      // Stream the range - for GridFS we need to read and skip
+      const downloadStream = await getFileStream(fileId);
+      let bytesRead = 0;
+      
+      downloadStream.on('data', (chunk) => {
+        const chunkStart = bytesRead;
+        const chunkEnd = bytesRead + chunk.length - 1;
+        
+        // Skip chunks before the start position
+        if (chunkEnd < start) {
+          bytesRead += chunk.length;
+          return;
+        }
+        
+        // Stop if we've passed the end
+        if (chunkStart > end) {
+          downloadStream.destroy();
+          return;
+        }
+        
+        // Calculate the portion of this chunk to send
+        const sendStart = Math.max(0, start - chunkStart);
+        const sendEnd = Math.min(chunk.length, end - chunkStart + 1);
+        
+        if (sendStart < sendEnd && res.writable && !res.destroyed) {
+          res.write(chunk.slice(sendStart, sendEnd));
+        }
+        
+        bytesRead += chunk.length;
+        
+        // Stop if we've reached the end
+        if (chunkEnd >= end) {
+          downloadStream.destroy();
+          if (!res.destroyed) {
+            res.end();
+          }
+        }
+      });
+
+      downloadStream.on('end', () => {
+        if (!res.destroyed && !res.headersSent) {
+          res.end();
+        }
+      });
+
+      downloadStream.on('error', (error) => {
+        console.error('File stream error:', error);
+        if (!res.headersSent && !res.destroyed) {
+          res.status(500).json({ error: 'Error streaming file' });
+        } else if (!res.destroyed) {
+          res.end();
+        }
+      });
     } else {
-      res.setHeader('Content-Length', metadata.length);
-    }
-
-    // Stream file
-    const downloadStream = await getFileStream(fileId);
-    downloadStream.pipe(res);
-
-    downloadStream.on('error', (error) => {
-      console.error('File stream error:', error);
-      if (!res.headersSent) {
-        res.status(500).json({ error: 'Error streaming file' });
+      // Full file stream (no range request)
+      if (contentType.startsWith('audio/') || contentType.startsWith('video/')) {
+        res.setHeader('Accept-Ranges', 'bytes');
       }
-    });
+      res.setHeader('Content-Length', fileSize);
+      res.setHeader('Content-Type', contentType);
+
+      const downloadStream = await getFileStream(fileId);
+      downloadStream.pipe(res);
+
+      downloadStream.on('error', (error) => {
+        console.error('File stream error:', error);
+        if (!res.headersSent) {
+          res.status(500).json({ error: 'Error streaming file' });
+        }
+      });
+    }
   } catch (error) {
     console.error('Get file error:', error);
     if (!res.headersSent) {
@@ -82,4 +139,3 @@ router.delete('/:fileId', async (req, res) => {
 });
 
 export default router;
-

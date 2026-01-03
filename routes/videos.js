@@ -47,11 +47,20 @@ router.get('/', authenticate, requireSubscription, async (req, res) => {
     const total = await db.collection('videos').countDocuments(filter);
 
     res.json({
-      videos: videos.map(video => ({
-        id: video._id.toString(),
-        ...video,
-        _id: undefined
-      })),
+      videos: videos.map(video => {
+        // Convert file_id to URL if it exists, otherwise use legacy file_path
+        const file_path = video.file_id 
+          ? `/api/files/${video.file_id}` 
+          : (video.file_path || null);
+
+        return {
+          id: video._id.toString(),
+          ...video,
+          _id: undefined,
+          file_path: file_path,
+          file_id: video.file_id?.toString()
+        };
+      }),
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -98,11 +107,18 @@ router.get('/:id', authenticate, requireSubscription, async (req, res) => {
       return res.status(404).json({ error: 'Video not found' });
     }
 
+    // Convert file_id to URL if it exists, otherwise use legacy file_path
+    const file_path = video[0].file_id 
+      ? `/api/files/${video[0].file_id}` 
+      : (video[0].file_path || null);
+
     res.json({
       video: {
         id: video[0]._id.toString(),
         ...video[0],
-        _id: undefined
+        _id: undefined,
+        file_path: file_path,
+        file_id: video[0].file_id?.toString()
       }
     });
   } catch (error) {

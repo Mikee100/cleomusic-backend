@@ -47,11 +47,20 @@ router.get('/', authenticate, requireSubscription, async (req, res) => {
     const total = await db.collection('photos').countDocuments(filter);
 
     res.json({
-      photos: photos.map(photo => ({
-        id: photo._id.toString(),
-        ...photo,
-        _id: undefined
-      })),
+      photos: photos.map(photo => {
+        // Convert file_id to URL if it exists, otherwise use legacy file_path
+        const file_path = photo.file_id 
+          ? `/api/files/${photo.file_id}` 
+          : (photo.file_path || null);
+
+        return {
+          id: photo._id.toString(),
+          ...photo,
+          _id: undefined,
+          file_path: file_path,
+          file_id: photo.file_id?.toString()
+        };
+      }),
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -98,11 +107,18 @@ router.get('/:id', authenticate, requireSubscription, async (req, res) => {
       return res.status(404).json({ error: 'Photo not found' });
     }
 
+    // Convert file_id to URL if it exists, otherwise use legacy file_path
+    const file_path = photo[0].file_id 
+      ? `/api/files/${photo[0].file_id}` 
+      : (photo[0].file_path || null);
+
     res.json({
       photo: {
         id: photo[0]._id.toString(),
         ...photo[0],
-        _id: undefined
+        _id: undefined,
+        file_path: file_path,
+        file_id: photo[0].file_id?.toString()
       }
     });
   } catch (error) {
