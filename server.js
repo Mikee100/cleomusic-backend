@@ -97,6 +97,10 @@ app.get('/api/health', (req, res) => {
       allowedOrigins: allowedOrigins,
       frontendUrl: process.env.FRONTEND_URL || '(not set)',
       nodeEnv: process.env.NODE_ENV || 'development'
+    },
+    setup: {
+      note: 'Use POST /api/auth/setup with secret to create admin user and seed plans',
+      hasSetupSecret: !!process.env.SETUP_SECRET
     }
   });
 });

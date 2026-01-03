@@ -7,13 +7,113 @@ import { ObjectId } from 'mongodb';
 
 const router = express.Router();
 
+// Setup endpoint - creates admin user and seeds plans (one-time use via HTTP)
+// Protected by a simple secret key to prevent abuse
+router.post('/setup', async (req, res) => {
+  try {
+    const { secret, email, password, name } = req.body;
+    const setupSecret = process.env.SETUP_SECRET || 'setup-secret-change-me';
+    
+    // Verify secret
+    if (secret !== setupSecret) {
+      return res.status(401).json({ error: 'Invalid setup secret' });
+    }
+
+    const db = await getDB();
+    const results = {};
+
+    // Create admin user
+    const adminEmail = email || 'admin@cleomusic.com';
+    const adminPassword = password || 'admin123';
+    const adminName = name || 'Admin';
+    
+    const existingAdmin = await db.collection('users').findOne({ email: adminEmail });
+    if (existingAdmin) {
+      results.admin = { message: 'Admin user already exists', email: adminEmail };
+    } else {
+      const hashedPassword = await bcrypt.hash(adminPassword, 10);
+      await db.collection('users').insertOne({
+        email: adminEmail,
+        password: hashedPassword,
+        name: adminName,
+        role: 'admin',
+        created_at: new Date(),
+        updated_at: new Date()
+      });
+      results.admin = { 
+        message: 'Admin user created successfully',
+        email: adminEmail,
+        password: adminPassword,
+        warning: 'Please change the password after first login!'
+      };
+    }
+
+    // Seed subscription plans
+    const existingPlans = await db.collection('subscription_plans').countDocuments();
+    if (existingPlans === 0) {
+      const plans = [
+        {
+          name: 'Basic',
+          description: '1 month access to all music',
+          price: 9.99,
+          duration_days: 30,
+          stripe_price_id: null,
+          is_active: true,
+          created_at: new Date()
+        },
+        {
+          name: 'Premium',
+          description: '3 months access to all music',
+          price: 24.99,
+          duration_days: 90,
+          stripe_price_id: null,
+          is_active: true,
+          created_at: new Date()
+        },
+        {
+          name: 'Annual',
+          description: '12 months access to all music',
+          price: 79.99,
+          duration_days: 365,
+          stripe_price_id: null,
+          is_active: true,
+          created_at: new Date()
+        }
+      ];
+      await db.collection('subscription_plans').insertMany(plans);
+      results.plans = { message: 'Subscription plans created', count: plans.length };
+    } else {
+      results.plans = { message: 'Subscription plans already exist', count: existingPlans };
+    }
+
+    res.json({
+      message: 'Setup completed successfully',
+      results
+    });
+  } catch (error) {
+    console.error('Setup error:', error);
+    res.status(500).json({ 
+      error: 'Setup failed',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 // Register
 router.post('/register', async (req, res) => {
   try {
     const { email, password, name } = req.body;
 
+    // Better error messages
     if (!email || !password || !name) {
-      return res.status(400).json({ error: 'All fields are required' });
+      const missing = [];
+      if (!email) missing.push('email');
+      if (!password) missing.push('password');
+      if (!name) missing.push('name');
+      return res.status(400).json({ 
+        error: 'All fields are required',
+        missing: missing
+      });
     }
 
     const db = await getDB();
@@ -21,7 +121,7 @@ router.post('/register', async (req, res) => {
     // Check if user exists
     const existingUser = await db.collection('users').findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ error: 'User already exists' });
+      return res.status(400).json({ error: 'User already exists. Please try logging in instead.' });
     }
 
     // Hash password
@@ -58,7 +158,10 @@ router.post('/register', async (req, res) => {
     });
   } catch (error) {
     console.error('Register error:', error);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ 
+      error: 'Server error',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
