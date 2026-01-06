@@ -39,8 +39,8 @@ const formatSong = (song) => {
   };
 };
 
-// Get all active songs (requires subscription)
-router.get('/', authenticate, requireSubscription, async (req, res) => {
+// Get all active songs (free users can browse, but will get interrupted when playing)
+router.get('/', authenticate, async (req, res) => {
   try {
     const { genre, search, page = 1, limit = 20, sort = 'newest', album_id } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -187,8 +187,8 @@ router.get('/meta/genres', authenticate, async (req, res) => {
   }
 });
 
-// Get most popular songs (must be before /:id route)
-router.get('/popular', authenticate, requireSubscription, async (req, res) => {
+// Get most popular songs (free users can browse, but will get interrupted when playing)
+router.get('/popular', authenticate, async (req, res) => {
   try {
     const { limit = 10 } = req.query;
     const db = await getDB();

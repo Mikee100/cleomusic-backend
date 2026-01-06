@@ -28,8 +28,8 @@ const formatAlbum = (album) => {
   };
 };
 
-// Get all active albums (requires subscription)
-router.get('/', authenticate, requireSubscription, async (req, res) => {
+// Get all active albums (free users can browse, but will get interrupted when playing)
+router.get('/', authenticate, async (req, res) => {
   try {
     const { search, artist, page = 1, limit = 20 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -87,8 +87,8 @@ router.get('/', authenticate, requireSubscription, async (req, res) => {
   }
 });
 
-// Get single album with songs (requires subscription)
-router.get('/:id', authenticate, requireSubscription, async (req, res) => {
+// Get single album with songs (free users can browse, but will get interrupted when playing)
+router.get('/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const db = await getDB();

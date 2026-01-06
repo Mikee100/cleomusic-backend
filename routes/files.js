@@ -23,6 +23,10 @@ router.get('/:fileId', async (req, res) => {
     const contentType = metadata.metadata?.contentType || 'application/octet-stream';
     const range = req.headers.range;
 
+    // Set caching headers for better performance
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('Accept-Ranges', 'bytes');
+    
     // Handle range requests for audio/video
     if (range && (contentType.startsWith('audio/') || contentType.startsWith('video/'))) {
       const parts = range.replace(/bytes=/, '').split('-');
@@ -38,7 +42,6 @@ router.get('/:fileId', async (req, res) => {
 
       res.status(206);
       res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
-      res.setHeader('Accept-Ranges', 'bytes');
       res.setHeader('Content-Length', chunksize);
       res.setHeader('Content-Type', contentType);
 
@@ -97,9 +100,6 @@ router.get('/:fileId', async (req, res) => {
       });
     } else {
       // Full file stream (no range request)
-      if (contentType.startsWith('audio/') || contentType.startsWith('video/')) {
-        res.setHeader('Accept-Ranges', 'bytes');
-      }
       res.setHeader('Content-Length', fileSize);
       res.setHeader('Content-Type', contentType);
 

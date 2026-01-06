@@ -116,6 +116,15 @@ router.post('/register', async (req, res) => {
       });
     }
 
+    // Check if JWT_SECRET is configured
+    if (!process.env.JWT_SECRET) {
+      console.error('JWT_SECRET is not configured in environment variables');
+      return res.status(500).json({ 
+        error: 'Server configuration error. Please contact support.',
+        details: process.env.NODE_ENV === 'development' ? 'JWT_SECRET is missing from environment variables' : undefined
+      });
+    }
+
     const db = await getDB();
 
     // Check if user exists
@@ -159,7 +168,7 @@ router.post('/register', async (req, res) => {
   } catch (error) {
     console.error('Register error:', error);
     res.status(500).json({ 
-      error: 'Server error',
+      error: 'Registration failed. Please try again.',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -172,6 +181,15 @@ router.post('/login', async (req, res) => {
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    // Check if JWT_SECRET is configured
+    if (!process.env.JWT_SECRET) {
+      console.error('JWT_SECRET is not configured in environment variables');
+      return res.status(500).json({ 
+        error: 'Server configuration error. Please contact support.',
+        details: process.env.NODE_ENV === 'development' ? 'JWT_SECRET is missing from environment variables' : undefined
+      });
     }
 
     const db = await getDB();
@@ -207,7 +225,10 @@ router.post('/login', async (req, res) => {
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ error: 'Server error' });
+    res.status(500).json({ 
+      error: 'Login failed. Please try again.',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 

@@ -5,8 +5,8 @@ import { ObjectId } from 'mongodb';
 
 const router = express.Router();
 
-// Get user statistics
-router.get('/stats', authenticate, requireSubscription, async (req, res) => {
+// Get user statistics (free users can see their stats)
+router.get('/stats', authenticate, async (req, res) => {
   try {
     const db = await getDB();
     const userId = new ObjectId(req.user.id);
