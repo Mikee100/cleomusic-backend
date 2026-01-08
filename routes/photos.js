@@ -1,12 +1,12 @@
 import express from 'express';
 import { getDB } from '../config/database.js';
-import { authenticate, requireSubscription } from '../middleware/auth.js';
+import { authenticate } from '../middleware/auth.js';
 import { ObjectId } from 'mongodb';
 
 const router = express.Router();
 
-// Get all active photos (requires subscription)
-router.get('/', authenticate, requireSubscription, async (req, res) => {
+// Get all active photos (free users can browse; frontend will blur images)
+router.get('/', authenticate, async (req, res) => {
   try {
     const { search, page = 1, limit = 20 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -75,7 +75,7 @@ router.get('/', authenticate, requireSubscription, async (req, res) => {
 });
 
 // Get single photo
-router.get('/:id', authenticate, requireSubscription, async (req, res) => {
+router.get('/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const db = await getDB();

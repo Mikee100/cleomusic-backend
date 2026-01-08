@@ -1,9 +1,93 @@
 import express from 'express';
+import bcrypt from 'bcryptjs';
 import { getDB } from '../config/database.js';
-import { authenticate, requireSubscription } from '../middleware/auth.js';
+import { authenticate } from '../middleware/auth.js';
 import { ObjectId } from 'mongodb';
 
 const router = express.Router();
+
+// Get current user profile
+router.get('/me', authenticate, async (req, res) => {
+  try {
+    const db = await getDB();
+    const userId = new ObjectId(req.user.id);
+
+    const user = await db.collection('users').findOne(
+      { _id: userId },
+      { projection: { password: 0 } }
+    );
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({
+      user: {
+        id: user._id.toString(),
+        email: user.email,
+        name: user.name,
+        role: user.role || 'user',
+        created_at: user.created_at,
+        updated_at: user.updated_at
+      }
+    });
+  } catch (error) {
+    console.error('Get profile error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update current user profile
+router.put('/me', authenticate, async (req, res) => {
+  try {
+    const { name, password } = req.body;
+
+    if (!name && !password) {
+      return res.status(400).json({ error: 'Nothing to update' });
+    }
+
+    const db = await getDB();
+    const userId = new ObjectId(req.user.id);
+
+    const updateFields = { updated_at: new Date() };
+
+    if (name) {
+      updateFields.name = name.trim();
+    }
+
+    if (password) {
+      if (password.length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters' });
+      }
+      const hashedPassword = await bcrypt.hash(password, 10);
+      updateFields.password = hashedPassword;
+    }
+
+    const result = await db.collection('users').findOneAndUpdate(
+      { _id: userId },
+      { $set: updateFields },
+      { returnDocument: 'after', projection: { password: 0 } }
+    );
+
+    if (!result.value) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({
+      user: {
+        id: result.value._id.toString(),
+        email: result.value.email,
+        name: result.value.name,
+        role: result.value.role || 'user',
+        created_at: result.value.created_at,
+        updated_at: result.value.updated_at
+      }
+    });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // Get user statistics (free users can see their stats)
 router.get('/stats', authenticate, async (req, res) => {

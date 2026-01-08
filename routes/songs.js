@@ -16,6 +16,10 @@ const formatSong = (song) => {
     ? `/api/files/${song.cover_image_id}` 
     : (song.cover_image_path || null);
 
+  const background_video_path = song.background_video_id 
+    ? `/api/files/${song.background_video_id}` 
+    : null;
+
   return {
     id: song._id.toString(),
     title: song.title,
@@ -24,8 +28,10 @@ const formatSong = (song) => {
     genre: song.genre,
     file_path: file_path,
     cover_image_path: cover_image_path,
+    background_video_path: background_video_path,
     file_id: song.file_id?.toString(),
     cover_image_id: song.cover_image_id?.toString(),
+    background_video_id: song.background_video_id?.toString(),
     duration: song.duration,
     file_size: song.file_size,
     is_archived: song.is_archived || false,
@@ -338,11 +344,15 @@ router.get('/favorites', authenticate, requireSubscription, async (req, res) => 
   }
 });
 
-// Get single song (requires subscription) - must be after specific routes
-router.get('/:id', authenticate, requireSubscription, async (req, res) => {
+// Get single song (free users can access, but will get interrupted when playing) - must be after specific routes
+router.get('/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const db = await getDB();
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).json({ error: 'Invalid song ID' });
+    }
 
     const song = await db.collection('songs').findOne({
       _id: new ObjectId(id),
@@ -354,7 +364,7 @@ router.get('/:id', authenticate, requireSubscription, async (req, res) => {
       return res.status(404).json({ error: 'Song not found' });
     }
 
-    res.json(formatSong(song));
+    res.json({ song: formatSong(song) });
   } catch (error) {
     console.error('Get song error:', error);
     res.status(500).json({ error: 'Server error' });

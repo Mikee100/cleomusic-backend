@@ -21,7 +21,7 @@ const fileFilter = (req, file, cb) => {
     } else {
       cb(new Error('Invalid image file type. Only jpg, jpeg, png, gif, webp are allowed.'));
     }
-  } else if (file.fieldname === 'videoFile') {
+  } else if (file.fieldname === 'videoFile' || file.fieldname === 'backgroundVideo') {
     if (allowedVideoTypes.test(file.originalname)) {
       cb(null, true);
     } else {

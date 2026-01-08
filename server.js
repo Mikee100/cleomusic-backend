@@ -16,6 +16,7 @@ import instrumentalRoutes from './routes/instrumentals.js';
 import playlistRoutes from './routes/playlists.js';
 import userRoutes from './routes/users.js';
 import fileRoutes from './routes/files.js';
+import upcomingRoutes from './routes/upcoming.js';
 
 dotenv.config();
 
@@ -87,6 +88,7 @@ app.use('/api/instrumentals', instrumentalRoutes);
 app.use('/api/playlists', playlistRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/files', fileRoutes);
+app.use('/api/upcoming', upcomingRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

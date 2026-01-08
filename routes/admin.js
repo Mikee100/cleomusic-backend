@@ -20,7 +20,7 @@ router.use(requireAdmin);
 // Helper function to format document with id and convert file IDs to URLs
 const formatDoc = (doc) => {
   if (!doc) return null;
-  const { _id, file_id, cover_image_id, file_path, cover_image_path, ...rest } = doc;
+  const { _id, file_id, cover_image_id, background_video_id, file_path, cover_image_path, ...rest } = doc;
   
   // Convert file_id to URL if it exists, otherwise use legacy file_path
   const formatted = {
@@ -42,6 +42,11 @@ const formatDoc = (doc) => {
     formatted.cover_image_path = cover_image_path;
   }
   
+  if (background_video_id) {
+    formatted.background_video_id = background_video_id.toString();
+    formatted.background_video_path = `/api/files/${background_video_id}`;
+  }
+  
   return formatted;
 };
 
@@ -50,7 +55,8 @@ const formatDoc = (doc) => {
 // Upload song
 router.post('/songs', uploadSongFiles.fields([
   { name: 'musicFile', maxCount: 1 },
-  { name: 'coverImage', maxCount: 1 }
+  { name: 'coverImage', maxCount: 1 },
+  { name: 'backgroundVideo', maxCount: 1 }
 ]), async (req, res) => {
   try {
     const { title, artist, album, genre, album_id } = req.body;
@@ -61,10 +67,12 @@ router.post('/songs', uploadSongFiles.fields([
 
     const musicFile = req.files.musicFile[0];
     const coverFile = req.files?.coverImage?.[0];
+    const backgroundVideoFile = req.files?.backgroundVideo?.[0];
 
     // Upload files to GridFS
     const musicFileId = await uploadFile(musicFile, { type: 'music' });
     const coverImageId = coverFile ? await uploadFile(coverFile, { type: 'cover' }) : null;
+    const backgroundVideoId = backgroundVideoFile ? await uploadFile(backgroundVideoFile, { type: 'video' }) : null;
 
     const db = await getDB();
     const result = await db.collection('songs').insertOne({
@@ -74,6 +82,7 @@ router.post('/songs', uploadSongFiles.fields([
       genre: genre || null,
       file_id: musicFileId,
       cover_image_id: coverImageId,
+      background_video_id: backgroundVideoId ? new ObjectId(backgroundVideoId) : null,
       file_size: musicFile.size,
       uploaded_by: new ObjectId(req.user.id),
       album_id: album_id ? new ObjectId(album_id) : null,
@@ -156,10 +165,15 @@ router.get('/songs', async (req, res) => {
 });
 
 // Update song
-router.put('/songs/:id', async (req, res) => {
+router.put('/songs/:id', uploadSongFiles.fields([
+  { name: 'coverImage', maxCount: 1 },
+  { name: 'backgroundVideo', maxCount: 1 }
+]), async (req, res) => {
   try {
     const { id } = req.params;
     const { title, artist, album, genre, is_active, is_archived } = req.body;
+    const coverFile = req.files?.coverImage?.[0];
+    const backgroundVideoFile = req.files?.backgroundVideo?.[0];
     const db = await getDB();
 
     const update = { updated_at: new Date() };
@@ -169,6 +183,19 @@ router.put('/songs/:id', async (req, res) => {
     if (genre !== undefined) update.genre = genre;
     if (is_active !== undefined) update.is_active = is_active;
     if (is_archived !== undefined) update.is_archived = is_archived;
+
+    // Handle cover image upload if provided
+    if (coverFile) {
+      const coverImageId = await uploadFile(coverFile, { type: 'cover' });
+      update.cover_image_id = new ObjectId(coverImageId);
+      update.cover_image_path = null; // Clear legacy path
+    }
+
+    // Handle background video upload if provided
+    if (backgroundVideoFile) {
+      const backgroundVideoId = await uploadFile(backgroundVideoFile, { type: 'video' });
+      update.background_video_id = new ObjectId(backgroundVideoId);
+    }
 
     const result = await db.collection('songs').findOneAndUpdate(
       { _id: new ObjectId(id) },
