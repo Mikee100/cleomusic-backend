@@ -1542,7 +1542,7 @@ router.delete('/photos/bulk', async (req, res) => {
 
 router.post('/videos', uploadVideo.single('videoFile'), async (req, res) => {
   try {
-    const { title, description } = req.body;
+    const { title, description, type } = req.body;
 
     if (!title || !req.file) {
       return res.status(400).json({ error: 'Title and video file are required' });
@@ -1555,6 +1555,8 @@ router.post('/videos', uploadVideo.single('videoFile'), async (req, res) => {
     const result = await db.collection('videos').insertOne({
       title,
       description: description || null,
+      // Distinguish between normal videos and reels
+      type: type === 'reel' ? 'reel' : 'video',
       file_id: videoFileId,
       file_size: req.file.size,
       uploaded_by: new ObjectId(req.user.id),
@@ -1578,13 +1580,23 @@ router.post('/videos', uploadVideo.single('videoFile'), async (req, res) => {
 
 router.get('/videos', async (req, res) => {
   try {
-    const { page = 1, limit = 20, archived, search } = req.query;
+    const { page = 1, limit = 20, archived, search, kind } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const db = await getDB();
 
     const filter = {};
     if (archived !== undefined) {
       filter.is_archived = archived === 'true';
+    }
+    // kind: 'video' | 'reel' | undefined (all)
+    if (kind === 'video') {
+      filter.type = 'video';
+    } else if (kind === 'reel') {
+      // Treat missing type as reel so legacy entries still show up
+      filter.$or = [
+        { type: 'reel' },
+        { type: { $exists: false } }
+      ];
     }
     if (search) {
       filter.$or = [
@@ -1616,7 +1628,20 @@ router.get('/videos', async (req, res) => {
     const total = await db.collection('videos').countDocuments(filter);
 
     res.json({
-      videos: videos.map(formatDoc),
+      videos: videos.map((video) => {
+        // Align with public videos API: expose a usable file_path URL
+        const file_path = video.file_id
+          ? `/api/files/${video.file_id}`
+          : (video.file_path || null);
+
+        return {
+          id: video._id.toString(),
+          ...video,
+          _id: undefined,
+          file_path,
+          file_id: video.file_id?.toString()
+        };
+      }),
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -1626,6 +1651,52 @@ router.get('/videos', async (req, res) => {
     });
   } catch (error) {
     console.error('Get admin videos error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+router.get('/videos/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = await getDB();
+
+    const video = await db.collection('videos').aggregate([
+      { $match: { _id: new ObjectId(id) } },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'uploaded_by',
+          foreignField: '_id',
+          as: 'uploader'
+        }
+      },
+      {
+        $addFields: {
+          uploaded_by_name: { $arrayElemAt: ['$uploader.name', 0] }
+        }
+      }
+    ]).toArray();
+
+    if (!video || video.length === 0) {
+      return res.status(404).json({ error: 'Video not found' });
+    }
+
+    const v = video[0];
+    const file_path = v.file_id
+      ? `/api/files/${v.file_id}`
+      : (v.file_path || null);
+
+    res.json({
+      video: {
+        id: v._id.toString(),
+        ...v,
+        _id: undefined,
+        file_path,
+        file_id: v.file_id?.toString()
+      }
+    });
+  } catch (error) {
+    console.error('Get video error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

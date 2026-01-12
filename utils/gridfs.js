@@ -32,11 +32,19 @@ export async function uploadFile(file, metadata = {}) {
 }
 
 // Get file stream from GridFS
-export async function getFileStream(fileId) {
+export async function getFileStream(fileId, start = 0, end = null) {
   try {
     const bucket = await getBucket();
     const fileIdObj = new ObjectId(fileId);
-    return bucket.openDownloadStream(fileIdObj);
+    const options = {};
+    
+    // GridFS doesn't support native range requests, but we can optimize
+    // by using start option if available (MongoDB 4.2+)
+    if (start > 0) {
+      options.start = start;
+    }
+    
+    return bucket.openDownloadStream(fileIdObj, options);
   } catch (error) {
     console.error('GridFS get file error:', error);
     throw error;

@@ -8,7 +8,7 @@ const router = express.Router();
 // Get all active videos (requires subscription)
 router.get('/', authenticate, requireSubscription, async (req, res) => {
   try {
-    const { search, page = 1, limit = 20 } = req.query;
+    const { search, page = 1, limit = 20, kind } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const db = await getDB();
 
@@ -16,6 +16,17 @@ router.get('/', authenticate, requireSubscription, async (req, res) => {
       is_active: true,
       is_archived: false
     };
+
+    // kind: 'video' | 'reel' | undefined (all)
+    if (kind === 'video') {
+      filter.type = 'video';
+    } else if (kind === 'reel') {
+      // Legacy content without type should appear in reels
+      filter.$or = [
+        { type: 'reel' },
+        { type: { $exists: false } }
+      ];
+    }
 
     if (search) {
       filter.$or = [
