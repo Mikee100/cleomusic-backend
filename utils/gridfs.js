@@ -43,6 +43,11 @@ export async function getFileStream(fileId, start = 0, end = null) {
     if (start > 0) {
       options.start = start;
     }
+
+    // If end is provided, we can use it to limit the stream
+    if (end !== null) {
+      options.end = end + 1; // GridFS end is exclusive
+    }
     
     return bucket.openDownloadStream(fileIdObj, options);
   } catch (error) {

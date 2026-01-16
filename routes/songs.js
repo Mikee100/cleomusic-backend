@@ -41,7 +41,8 @@ const formatSong = (song) => {
     play_count: song.play_count || 0,
     created_at: song.created_at,
     updated_at: song.updated_at,
-    favorite_count: song.favorite_count || 0
+    favorite_count: song.favorite_count || 0,
+    is_favorited: song.is_favorited || false
   };
 };
 
@@ -96,7 +97,21 @@ router.get('/', authenticate, async (req, res) => {
       {
         $addFields: {
           play_count: { $ifNull: ['$play_count', 0] },
-          favorite_count: { $size: '$favorites' }
+          favorite_count: { $size: '$favorites' },
+          is_favorited: {
+            $gt: [
+              {
+                $size: {
+                  $filter: {
+                    input: '$favorites',
+                    as: 'fav',
+                    cond: { $eq: ['$$fav.user_id', new ObjectId(req.user.id)] }
+                  }
+                }
+              },
+              0
+            ]
+          }
         }
       }
     ];
@@ -149,6 +164,7 @@ router.get('/', authenticate, async (req, res) => {
         album_id: 1,
         play_count: 1,
         favorite_count: 1,
+        is_favorited: 1,
         created_at: 1,
         updated_at: 1
       }
@@ -217,7 +233,21 @@ router.get('/popular', authenticate, async (req, res) => {
       {
         $addFields: {
           play_count: { $ifNull: ['$play_count', 0] },
-          favorite_count: { $size: '$favorites' }
+          favorite_count: { $size: '$favorites' },
+          is_favorited: {
+            $gt: [
+              {
+                $size: {
+                  $filter: {
+                    input: '$favorites',
+                    as: 'fav',
+                    cond: { $eq: ['$$fav.user_id', new ObjectId(req.user.id)] }
+                  }
+                }
+              },
+              0
+            ]
+          }
         }
       },
       {
