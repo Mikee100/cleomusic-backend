@@ -37,7 +37,7 @@ const checkContentExists = async (contentType, contentId) => {
 // ========== COMMENTS ==========
 
 // Get comments for a content item
-router.get('/:contentType/:contentId/comments', authenticate, requireSubscription, async (req, res) => {
+router.get('/:contentType/:contentId/comments', authenticate, async (req, res) => {
   try {
     const { contentType, contentId } = req.params;
 
@@ -88,7 +88,7 @@ router.get('/:contentType/:contentId/comments', authenticate, requireSubscriptio
 });
 
 // Add a comment
-router.post('/:contentType/:contentId/comments', authenticate, requireSubscription, async (req, res) => {
+router.post('/:contentType/:contentId/comments', authenticate, async (req, res) => {
   try {
     const { contentType, contentId } = req.params;
     const { comment_text } = req.body;
@@ -138,7 +138,7 @@ router.post('/:contentType/:contentId/comments', authenticate, requireSubscripti
 });
 
 // Delete a comment (only by the user who created it or admin)
-router.delete('/comments/:commentId', authenticate, requireSubscription, async (req, res) => {
+router.delete('/comments/:commentId', authenticate, async (req, res) => {
   try {
     const { commentId } = req.params;
     const userId = new ObjectId(req.user.id);
@@ -167,7 +167,7 @@ router.delete('/comments/:commentId', authenticate, requireSubscription, async (
 // ========== LIKES ==========
 
 // Get like count and check if user has liked
-router.get('/:contentType/:contentId/likes', authenticate, requireSubscription, async (req, res) => {
+router.get('/:contentType/:contentId/likes', authenticate, async (req, res) => {
   try {
     const { contentType, contentId } = req.params;
     const userId = new ObjectId(req.user.id);
@@ -206,7 +206,7 @@ router.get('/:contentType/:contentId/likes', authenticate, requireSubscription, 
 });
 
 // Toggle like
-router.post('/:contentType/:contentId/likes', authenticate, requireSubscription, async (req, res) => {
+router.post('/:contentType/:contentId/likes', authenticate, async (req, res) => {
   try {
     const { contentType, contentId } = req.params;
     const userId = new ObjectId(req.user.id);
@@ -263,7 +263,7 @@ router.post('/:contentType/:contentId/likes', authenticate, requireSubscription,
 // ========== DISLIKES ==========
 
 // Get dislike count and check if user has disliked
-router.get('/:contentType/:contentId/dislikes', authenticate, requireSubscription, async (req, res) => {
+router.get('/:contentType/:contentId/dislikes', authenticate, async (req, res) => {
   try {
     const { contentType, contentId } = req.params;
     const userId = new ObjectId(req.user.id);
@@ -302,7 +302,7 @@ router.get('/:contentType/:contentId/dislikes', authenticate, requireSubscriptio
 });
 
 // Toggle dislike
-router.post('/:contentType/:contentId/dislikes', authenticate, requireSubscription, async (req, res) => {
+router.post('/:contentType/:contentId/dislikes', authenticate, async (req, res) => {
   try {
     const { contentType, contentId } = req.params;
     const userId = new ObjectId(req.user.id);

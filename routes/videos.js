@@ -5,8 +5,8 @@ import { ObjectId } from 'mongodb';
 
 const router = express.Router();
 
-// Get all active videos (requires subscription)
-router.get('/', authenticate, requireSubscription, async (req, res) => {
+// Get all active videos (requires authentication)
+router.get('/', authenticate, async (req, res) => {
   try {
     const { search, page = 1, limit = 20, kind } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -85,8 +85,8 @@ router.get('/', authenticate, requireSubscription, async (req, res) => {
   }
 });
 
-// Get single video
-router.get('/:id', authenticate, requireSubscription, async (req, res) => {
+// Get single video (requires authentication)
+router.get('/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
     const db = await getDB();
@@ -134,6 +134,24 @@ router.get('/:id', authenticate, requireSubscription, async (req, res) => {
     });
   } catch (error) {
     console.error('Get video error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Increment video view count (requires authentication)
+router.post('/:id/view', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const db = await getDB();
+
+    await db.collection('videos').updateOne(
+      { _id: new ObjectId(id) },
+      { $inc: { views: 1 } }
+    );
+
+    res.json({ message: 'View incremented' });
+  } catch (error) {
+    console.error('Increment view error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
